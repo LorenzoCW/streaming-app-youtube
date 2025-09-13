@@ -1,0 +1,5 @@
+node_modules
+Docs
+.next
+.env
+package-lock.json

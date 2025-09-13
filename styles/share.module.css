@@ -1,0 +1,226 @@
+/* share.module.css */
+
+/* Container Principal */
+.container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background-color: #0F0F0F;
+  display: flex;
+  font-family: sans-serif;
+}
+
+/* Side Panel */
+.sidePanel {
+  width: 250px;
+  background-color: #1a1a1a;
+  color: #fff;
+  padding: 1rem;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.7);
+  font-family: sans-serif;
+  position: relative;
+  transform: translateX(-100%);
+  transition: transform 0.3s ease-out;
+}
+
+.sidePanelActive {
+  transform: translateX(0);
+}
+
+/* Main Content */
+.mainContent {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.3s ease;
+}
+
+.mainContentShifted {
+  transform: translateX(-125px);
+}
+
+/* Header */
+.header {
+  width: 90%;
+  max-width: 960px;
+  position: relative;
+  border-radius: 30px 30px 0 0;
+  color: #ffffff;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
+  background: linear-gradient(to right, #00d2ff, #3a7bd5);
+  padding: 2px;
+}
+
+.headerContent {
+  border-radius: 28px 28px 0 0;
+  background: linear-gradient(to right, #00d2ff, #3a7bd5);
+  padding: 20px;
+  text-align: center;
+}
+
+.headerTitleWrapper {
+  padding-bottom: 20px;
+}
+
+.headerTitle {
+  font-size: 8rem;
+  margin: 0;
+  font-family: monospace;
+}
+
+.headerSubtitle {
+  font-size: 2.5rem;
+  font-family: sans-serif;
+}
+
+/* Preview Container */
+.previewContainer {
+  position: relative;
+  width: 90%;
+  max-width: 960px;
+  aspect-ratio: 16/9;
+  border: 2px solid transparent;
+  border-image: linear-gradient(45deg, #00d2ff, #3a7bd5) 2;
+  overflow: hidden;
+  background-color: #000;
+}
+
+/* Status Badge */
+.statusBadge {
+  margin-top: 0.5rem;
+  margin-left: 0.5rem;
+  position: absolute;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+  padding: 0.5rem 1rem;
+  border-radius: 10px;
+  background: linear-gradient(45deg, #ff0000, #ff305d);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transition: background 0.3s, color 0.3s;
+  opacity: 90%;
+  z-index: 10;
+}
+
+.statusBadgeActive {
+  background: linear-gradient(45deg, #2c3e50, #34495e);
+}
+
+/* Loading Overlay */
+.loadingOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #666;
+  font-size: 1.5rem;
+  background-color: rgba(255, 255, 255, 0.1);
+  z-index: 10;
+}
+
+/* Buttons */
+.startButton,
+.stopButton {
+  margin-top: 2rem;
+  border: none;
+  color: #fff;
+  border-radius: 24px;
+  font-family: inherit;
+  font-size: 20px;
+  padding: 0.6em 1.5em;
+  cursor: pointer;
+  transition: background-size 0.3s ease, box-shadow 1.5s ease;
+}
+
+.startButton {
+  background-image: linear-gradient(30deg, #2622ff, #4ce3f7);
+  background-size: 100% auto;
+  background-position: right center;
+  animation: start-pulse 1.5s infinite;
+}
+
+.stopButton {
+  background-image: linear-gradient(30deg, #ff0000, #ff305d);
+  background-size: 100% auto;
+}
+
+.stopButton:hover {
+  background-position: right center;
+  background-size: 200% auto;
+  animation: stop-pulse 1.5s infinite;
+}
+
+.startButton:disabled,
+.stopButton:disabled {
+  animation: none;
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.startButton:disabled:hover,
+.stopButton:disabled:hover,
+.startButton:disabled:focus,
+.stopButton:disabled:focus {
+  box-shadow: none;
+}
+
+/* Keyframes */
+@keyframes start-pulse {
+  0% {
+    box-shadow: 0 0 0 0 #05bada66;
+  }
+
+  70% {
+    box-shadow: 0 0 0 10px rgb(218 103 68 / 0%);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgb(218 103 68 / 0%);
+  }
+}
+
+@keyframes stop-pulse {
+  0% {
+    box-shadow: 0 0 0 0 #ff4d4d;
+  }
+
+  70% {
+    box-shadow: 0 0 0 10px rgb(255 0 0 / 30%);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgb(255 0 0 / 30%);
+  }
+}
+
+/* Small screens */
+@media (max-width: 600px) {
+
+  .sidePanel {
+    display: none;
+  }
+
+  .headerTitle {
+    font-size: 4rem;
+  }
+
+  .headerSubtitle {
+    font-size: 1.2rem;
+  }
+
+  .statusBadge {
+    font-size: 12px;
+    padding: 0.3rem 0.6rem;
+  }
+}
