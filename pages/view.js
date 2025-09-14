@@ -27,13 +27,16 @@ const firebaseConfig = {
 export default function View() {
   const appRef = useRef(null);
   const dbRef = useRef(null);
-  const unsubscribeRef = useRef(null);
+  const linksUnsubRef = useRef(null);
+  const onlineUnsubRef = useRef(null);
 
   // Estados
-  const [videoId, setVideoId] = useState(null);
+  const [links, setLinks] = useState([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [hasStartedOnce, setHasStartedOnce] = useState(false);
+  const playerRef = useRef(null);
+  const currentIndexRef = useRef(0);
 
   // Inicializa RTDB
   const initFirebase = () => {
@@ -45,52 +48,7 @@ export default function View() {
     }
   };
 
-  // Extrai YouTube videoId de várias formas de URL ou recebe id diretamente
-  const parseYouTubeId = (input) => {
-    if (!input) return null;
-    // Se já for um ID curto (11 chars)
-    const trimmed = input.trim();
-    if (/^[\w-]{11}$/.test(trimmed)) return trimmed;
-
-    try {
-      // tenta como URL
-      // exemplos:
-      // https://www.youtube.com/watch?v=VIDEOID
-      // https://youtu.be/VIDEOID
-      // https://www.youtube.com/embed/VIDEOID
-      // https://www.youtube.com/live/VIDEOID
-
-      const url = new URL(trimmed);
-
-      if (url.hostname.includes('youtu.be')) {
-        return url.pathname.slice(1);
-      }
-      if (url.hostname.includes('youtube.com')) {
-        if (url.pathname.includes('/live/')) {
-          return url.pathname.split('/live/')[1];
-        }
-        if (url.searchParams && url.searchParams.get('v')) {
-          return url.searchParams.get('v');
-        }
-        const parts = url.pathname.split('/');
-        const embedIndex = parts.indexOf('embed');
-        if (embedIndex >= 0 && parts[embedIndex + 1]) {
-          return parts[embedIndex + 1];
-        }
-      }
-    } catch (e) {
-      showLog("Não é uma URL válida");
-    }
-
-    // Última tentativa: extrair com regex de qualquer string
-    const re = /(?:v=|\/embed\/|youtu\.be\/)([A-Za-z0-9\-_]{11})/;
-    const m = trimmed.match(re);
-    if (m && m[1]) return m[1];
-
-    return null;
-  };
-
-  // Monta src do embed com autoplay/mute conforme estado
+  // Monta src do embed com autoplay/mute conforme estado (fallback - not used when using YT API)
   const buildEmbedSrc = (vid, muted) => {
     if (!vid) return '';
     const base = `https://www.youtube.com/embed/${vid}`;
@@ -106,71 +64,182 @@ export default function View() {
     return `${base}?${params.toString()}`;
   };
 
-  // Lê o nó do RTDB que contém a live
+  // Use YouTube IFrame API to control playlist sequencing
+  const ensureYouTubeAPI = () => {
+    return new Promise((resolve) => {
+      if (window.YT && window.YT.Player) return resolve();
+      const existing = document.getElementById('youtube-iframe-api');
+      if (existing) {
+        existing.onload = () => resolve();
+        return;
+      }
+      const script = document.createElement('script');
+      script.id = 'youtube-iframe-api';
+      script.src = 'https://www.youtube.com/iframe_api';
+      script.onload = () => {
+        // The API sets window.YT when ready and calls onYouTubeIframeAPIReady; we resolve on that
+      };
+      document.body.appendChild(script);
+      // set global ready callback
+      window.onYouTubeIframeAPIReady = () => resolve();
+    });
+  };
+
   useEffect(() => {
     initFirebase();
     const db = dbRef.current;
     if (!db) return;
 
-    const liveRef = ref(db, 'livestreams/current');
+    // Listen to links
+    const linksRef = ref(db, 'livestreams/links');
+    const linksUnsub = onValue(linksRef, (snap) => {
+      const val = snap.val() || {};
+      const arr = Object.keys(val).map(k => ({ key: k, ...val[k] }));
+      setLinks(arr);
+    });
+    linksUnsubRef.current = linksUnsub;
 
-    const unsubscribe = onValue(
-      liveRef,
-      (snap) => {
-        if (!snap.exists()) {
-          showLog('📭 Stream não encontrada no RTDB');
-          setVideoId(null);
-          setIsStreaming(false);
-          return;
-        }
-        const data = snap.val();
-        // tenta vários campos: youtubeUrl, url, videoId
-        const candidate = data && (data.youtubeUrl || data.url || data.videoId) || null;
-        if (!candidate) {
-          showLog('📭 Nó presente mas sem campo youtubeUrl/url/videoId');
-          setVideoId(null);
-          setIsStreaming(false);
-          return;
+    // Listen to online flag
+    const onlineRef = ref(db, 'livestreams/online');
+    const onlineUnsub = onValue(onlineRef, (snap) => {
+      const exists = snap.exists();
+
+      if (!exists) {
+        // stopped -> primeiro limpa o player para evitar que a YT API tente manipular o DOM
+        setHasStartedOnce(prev => prev || false);
+
+        if (playerRef.current) {
+          try {
+            if (typeof playerRef.current.destroy === 'function') {
+              // método oficial para limpar player e listeners
+              playerRef.current.destroy();
+            } else if (typeof playerRef.current.stopVideo === 'function') {
+              // fallback mínimo
+              playerRef.current.stopVideo();
+            }
+          } catch (e) {
+            console.warn('Erro ao limpar YT player:', e);
+          }
+          playerRef.current = null;
         }
 
-        showLog('📡 Stream encontrada no RTDB:', candidate);
-        const vid = parseYouTubeId(candidate);
-        if (vid) {
-          setVideoId(vid);
-          setIsStreaming(true);
-          setHasStartedOnce(true);
-          showToast('▶️ Stream conectada');
-        } else {
-          // se não conseguiu extrair, marca como offline/erro
-          showLog('❌ Não foi possível extrair videoId do campo.');
-          setVideoId(null);
-          setIsStreaming(false);
-        }
-      },
-      (err) => {
-        showToast('❌ Falha ao buscar os dados:', err);
+        // agora atualiza o state (isso pode remover o <div id="player">)
+        setIsStreaming(false);
+      } else {
+        // started
+        setHasStartedOnce(true);
+        setIsStreaming(true);
       }
-    );
-
-    unsubscribeRef.current = unsubscribe;
+    });
+    onlineUnsubRef.current = onlineUnsub;
 
     return () => {
-      if (unsubscribeRef.current) {
-        unsubscribeRef.current();
-        unsubscribeRef.current = null;
+      if (linksUnsubRef.current) linksUnsubRef.current();
+      if (onlineUnsubRef.current) onlineUnsubRef.current();
+
+      // garante destruir o YT player caso o componente seja desmontado
+      if (playerRef.current) {
+        try {
+          if (typeof playerRef.current.destroy === 'function') {
+            playerRef.current.destroy();
+          } else if (typeof playerRef.current.stopVideo === 'function') {
+            playerRef.current.stopVideo();
+          }
+        } catch (e) { }
+        playerRef.current = null;
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Handler para habilitar áudio: atualiza state que força rebuild da src com mute=0
+  // When links change and streaming is active, (re)initialize or load first video
+  useEffect(() => {
+    if (!isStreaming || links.length === 0) return;
+
+    (async () => {
+      await ensureYouTubeAPI();
+
+      // create player if missing
+      if (!playerRef.current) {
+        playerRef.current = new window.YT.Player('player', {
+          height: '100%',
+          width: '100%',
+          playerVars: {
+            autoplay: 1,
+            playsinline: 1,
+            rel: 0,
+            modestbranding: 1,
+            controls: 0,
+            disablekb: 1
+          },
+          events: {
+            onReady: (ev) => {
+              // mute by default
+              if (!audioEnabled) ev.target.mute();
+              // load first
+              const first = links[0];
+              if (first && first.videoId) {
+                currentIndexRef.current = 0;
+                try { ev.target.loadVideoById(first.videoId); } catch (e) { ev.target.cueVideoById(first.videoId); }
+              }
+            },
+            onStateChange: (ev) => {
+              // YT.PlayerState.ENDED === 0
+              if (ev.data === window.YT.PlayerState.ENDED) {
+                // advance
+                const next = currentIndexRef.current + 1;
+                if (next < links.length) {
+                  currentIndexRef.current = next;
+                  const nextVid = links[next].videoId;
+                  try { playerRef.current.loadVideoById(nextVid); } catch (e) { playerRef.current.cueVideoById(nextVid); }
+                } else {
+                  // playlist finished -> optionally loop or stop
+                  // We'll stop and keep poster state
+                  showToast('🔚 Playlist finalizada');
+                }
+              }
+            }
+          }
+        });
+      } else {
+        // player exists -> load first video
+        if (playerRef.current && playerRef.current.loadVideoById) {
+          currentIndexRef.current = 0;
+          const first = links[0];
+          if (first && first.videoId) {
+            try { playerRef.current.loadVideoById(first.videoId); } catch (e) { playerRef.current.cueVideoById(first.videoId); }
+          }
+        }
+      }
+
+      // ensure mute state
+      if (playerRef.current) {
+        if (audioEnabled) {
+          if (typeof playerRef.current.unMute === 'function') {
+            playerRef.current.unMute();
+          } else if (typeof playerRef.current.setVolume === 'function') {
+            // fallback: ajustar volume caso API de mute não esteja disponível
+            playerRef.current.setVolume(100);
+          }
+        } else {
+          if (typeof playerRef.current.mute === 'function') {
+            playerRef.current.mute();
+          } else if (typeof playerRef.current.setVolume === 'function') {
+            // fallback: silenciar via volume
+            playerRef.current.setVolume(0);
+          }
+        }
+      }
+    })();
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [links, isStreaming]);
+
   const handleEnableAudio = () => {
     setAudioEnabled(true);
     showToast('🔊 Áudio ativado');
+    if (playerRef.current && playerRef.current.unMute) playerRef.current.unMute();
   };
-
-  // src do iframe depende de videoId e audioEnabled
-  const iframeSrc = videoId ? buildEmbedSrc(videoId, !audioEnabled) : '';
 
   return (
     <>
@@ -181,16 +250,9 @@ export default function View() {
           </div>
         )}
 
-        {/* iframe do YouTube preenchendo a tela */}
-        {videoId ? (
-          <iframe
-            title="Cimena Livestream"
-            src={iframeSrc}
-            className={styles.video}
-            allow="autoplay; fullscreen; picture-in-picture"
-            allowFullScreen
-            frameBorder="0"
-          />
+        {/* Player container (YouTube IFrame API will replace this div with an iframe) */}
+        {isStreaming && links.length > 0 ? (
+          <div id="player" className={styles.video} style={{ width: '100%', height: '100%' }}></div>
         ) : (
           // conteúdo quando não há live
           <>

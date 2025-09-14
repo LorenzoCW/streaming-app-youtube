@@ -1,4 +1,4 @@
-// share.js 
+// share.js
 import { useRef, useState, useEffect } from 'react';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -15,7 +15,8 @@ import {
   remove,
   serverTimestamp,
   get,
-  onDisconnect
+  onDisconnect,
+  onValue
 } from "firebase/database";
 
 const firebaseConfig = {
@@ -58,6 +59,7 @@ export default function Share() {
   const [connections, setConnections] = useState([]);
   const [isWideScreen, setIsWideScreen] = useState(true);
   const [buttonsDisabled, setButtonsDisabled] = useState(false);
+  const [links, setLinks] = useState([]);
 
   const updateConnections = () => {
     const hostEntry = broadcasterIdRef.current
@@ -172,9 +174,24 @@ export default function Share() {
       const app = initializeApp(firebaseConfig);
       appRef.current = app;
       dbRef.current = getDatabase(app);
-      showLog('Firebase inicializado (RTDB)');
+      showLog('Firebase inicializado');
+
+      // start listening to links
+      const linksRef = ref(dbRef.current, 'livestreams/links');
+      onValue(linksRef, (snap) => {
+        const val = snap.val() || {};
+        // Convert to array keeping push order
+        const arr = Object.keys(val).map(k => ({ key: k, ...val[k] }));
+        setLinks(arr);
+      });
     }
   };
+
+  useEffect(() => {
+    initFirebase();
+    const db = dbRef.current;
+    if (!db) return showToast('❌ Erro ao conectar ao RTDB');
+  }, []);
 
   // Iniciar stream
   const startStreaming = async () => {
@@ -182,12 +199,7 @@ export default function Share() {
     disableButtonsTemporarily();
     showLog('🟢 Iniciando fluxo de broadcast ...');
 
-    initFirebase();
     const db = dbRef.current;
-    if (!db) {
-      showToast('❌ Erro ao conectar ao RTDB');
-      return;
-    }
 
     // Gera broadcasterId e cria nó em RTDB
     const newBroadcasterId = generateBroadcasterId();
@@ -212,45 +224,32 @@ export default function Share() {
       }
     }
 
-    // Abre input para colar link (ou videoId)
-    const candidate = window.prompt('Link ou id da live do YouTube:');
-    if (!candidate) {
-      showToast('⏸️ Início de stream cancelado');
-      // cleanup broadcaster node se foi criado
-      try { await remove(bRef); } catch (e) { }
+    // Verifica se há links salvos
+    const linksSnap = await get(ref(db, 'livestreams/links'));
+    if (!linksSnap.exists()) {
+      showToast('⏸️ Lista vazia, adicione links no painel lateral antes de iniciar a stream.');
       broadcasterIdRef.current = null;
       return;
     }
 
-    const vid = parseYouTubeId(candidate);
-    if (!vid) {
-      showToast('❌ Link inválido.');
-      try { await remove(bRef); } catch (e) { }
-      broadcasterIdRef.current = null;
-      return;
-    }
-
-    // Escreve no Realtime Database o nó 'livestreams/current'
+    // Escreve nó que indica broadcaster online
     try {
-      const liveRef = ref(db, 'livestreams/current');
-      // garante remoção automática se o cliente cair
-      onDisconnect(liveRef).remove();
-      await set(liveRef, {
-        youtubeUrl: candidate,
-        videoId: vid,
+      const liveOnlineRef = ref(db, 'livestreams/online');
+      onDisconnect(liveOnlineRef).remove();
+      await set(liveOnlineRef, {
         started: true,
         startedAt: serverTimestamp(),
         broadcasterId: newBroadcasterId
       });
-      showLog('📡 Link salvo no RTDB: livestreams/current');
+      showLog('📡 Lista salva em livestreams/online');
     } catch (e) {
-      showToast('❌ Erro ao salvar RTDB:', e);
-      try { await remove(bRef); } catch (e) { }
+      showToast('❌ Erro ao marcar stream online');
+      try { await remove(bRef); } catch (err) { }
       broadcasterIdRef.current = null;
       return;
     }
 
-    // Também cria nó em RTDB com started=true
+    // Também cria nó em RTDB com started=true para signaling
     try {
       await set(bRef, {
         id: newBroadcasterId,
@@ -262,12 +261,12 @@ export default function Share() {
       showLog('⚠️ Falha ao criar signaling/broadcaster no RTDB:', e);
     }
 
-    // Thumbnail do YouTube
-    const thumb = `https://img.youtube.com/vi/${vid}/maxresdefault.jpg`;
-    // fallback para hqdefault
-    const fallbackThumb = `https://img.youtube.com/vi/${vid}/hqdefault.jpg`;
-    // usa hqdefault imediatamente; tenta setar maxres também
-    if (imageRef.current) {
+    // Set thumbnail for first video
+    const first = links[0];
+    const vid = first ? first.videoId : null;
+    const thumb = vid ? `https://img.youtube.com/vi/${vid}/maxresdefault.jpg` : null;
+    const fallbackThumb = vid ? `https://img.youtube.com/vi/${vid}/hqdefault.jpg` : null;
+    if (imageRef.current && fallbackThumb) {
       imageRef.current.src = fallbackThumb;
       setImageLoaded(true);
       // tentativa de carregar maxres (se 404, browser não substitui)
@@ -299,7 +298,7 @@ export default function Share() {
       if (dbRef.current) {
         try {
           await remove(ref(dbRef.current, "signaling/broadcaster"));
-          await remove(ref(dbRef.current, "livestreams/current"));
+          await remove(ref(dbRef.current, "livestreams/online"));
         } catch (e) { }
       }
     };
@@ -344,7 +343,7 @@ export default function Share() {
       try {
         await remove(ref(dbRef.current, "signaling/broadcaster"));
         await remove(ref(dbRef.current, "messages/broadcasterToViewers"));
-        await remove(ref(dbRef.current, "livestreams/current"));
+        await remove(ref(dbRef.current, "livestreams/online"));
       } catch (e) {
         showLog('⚠️ Erro ao remover nós RTDB:', e);
       }
@@ -392,16 +391,74 @@ export default function Share() {
     return `${minutes}:${seconds}`;
   }
 
+  // Links managers
+  const addLink = async () => {
+    const db = dbRef.current;
+
+    const candidate = window.prompt('Link ou ID do YouTube:');
+    if (!candidate) return;
+    const vid = parseYouTubeId(candidate);
+    if (!vid) return showToast('❌ Link inválido');
+
+    try {
+      const pushRef = push(ref(db, 'livestreams/links'));
+      await set(pushRef, {
+        url: candidate,
+        videoId: vid,
+        addedAt: serverTimestamp()
+      });
+      showToast('✅ Link adicionado');
+    } catch (e) {
+      showToast('❌ Falha ao adicionar link');
+      console.error(e);
+    }
+  };
+
+  const removeLink = async (key) => {
+    showToast("Removendo...")
+    initFirebase();
+    const db = dbRef.current;
+
+    try {
+      await remove(ref(db, `livestreams/links/${key}`));
+      showToast('🗑️ Link removido');
+    } catch (e) {
+      showToast('❌ Falha ao remover link');
+      console.error(e);
+    }
+  };
+
   return (
     <div className={styles.container}>
       {/* Side Panel */}
-      <div className={`${styles.sidePanel} ${isStreaming ? styles.sidePanelActive : ''}`}>
+      {/* <div className={`${styles.sidePanel} ${isStreaming ? styles.sidePanelActive : ''}`}> */}
+      <div className={`${styles.sidePanel} ${true ? styles.sidePanelActive : ''}`}>
+
+        <h2 style={{ marginTop: 0 }}>Links da Playlist</h2>
+
+        <div style={{ marginBottom: '0.5rem', display: 'flex', justifyContent: 'center' }}>
+          <button onClick={() => addLink()} className={styles.startButton}>➕ Adicionar link</button>
+        </div>
+
+        <ul style={{ listStyleType: 'none', padding: 0 }}>
+          {links.length === 0 && <li style={{ opacity: 0.7 }}>Nenhum link adicionado</li>}
+          {links.map((l, idx) => (
+            <li key={l.key} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+              <div style={{ display: 'flex' }}>
+                <button onClick={() => removeLink(l.key)} title="Remover" className={styles.stopButton} style={{ padding: '0.2rem 0.5rem' }}>🗑️</button>
+                <div style={{ flex: 1, fontSize: '0.95rem', paddingLeft: 10 }}>{idx + 1}. {l.url} </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+
         {isStreaming && (
           <>
-            <h2 style={{ marginTop: 0 }}>Conexões Ativas</h2>
+            <hr />
+            <h3>Conexões</h3>
             <ul style={{ listStyleType: 'none', padding: 0 }}>
               {connections.map((conn, index) => (
-                <li key={index} style={{ fontSize: '1.2rem' }}>
+                <li key={index} style={{ fontSize: '1rem' }}>
                   {conn.type === 'Host' ? '🎥 ' : '👀 '} {conn.type}: {conn.id}
                 </li>
               ))}

@@ -15,7 +15,7 @@
 
 /* Side Panel */
 .sidePanel {
-  width: 250px;
+  width: 300px;
   background-color: #1a1a1a;
   color: #fff;
   padding: 1rem;
@@ -88,6 +88,7 @@
   border-image: linear-gradient(45deg, #00d2ff, #3a7bd5) 2;
   overflow: hidden;
   background-color: #000;
+  margin-bottom: 2rem;
 }
 
 /* Status Badge */
@@ -131,7 +132,6 @@
 /* Buttons */
 .startButton,
 .stopButton {
-  margin-top: 2rem;
   border: none;
   color: #fff;
   border-radius: 24px;
