@@ -252,7 +252,17 @@ export default function View() {
 
         {/* Player container (YouTube IFrame API will replace this div with an iframe) */}
         {isStreaming && links.length > 0 ? (
-          <div id="player" className={styles.video} style={{ width: '100%', height: '100%' }}></div>
+          <div className={styles.videoWrapper} style={{ width: '100%', height: '100%' }}>
+            {/* prevent clicks */}
+            <div
+              className={styles.clickBlocker}
+              onClick={() => { }}
+              onDoubleClick={() => { }}
+              onContextMenu={(e) => e.preventDefault()} // avoids context menu 
+              role="presentation"
+            />
+            <div id="player" className={styles.video} style={{ width: '100%', height: '100%' }}></div>
+          </div>
         ) : (
           // conteúdo quando não há live
           <>
