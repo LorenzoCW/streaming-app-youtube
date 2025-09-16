@@ -28,8 +28,8 @@
   position: relative;
 }
 
-/* Overlay */
-.overlay {
+/* Overlays */
+.unmuteOverlay {
   position: absolute;
   top: 0;
   left: 0;
@@ -47,6 +47,20 @@
 .muteIcon {
   width: 80px;
   height: 80px;
+}
+
+.joinOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 40;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
 }
 
 /* elemento invisível que intercepta todos os cliques */
@@ -73,26 +87,45 @@
   justify-content: center;
   align-items: center;
   text-align: center;
-  background-color: rgb(181, 229, 248);
+  background: linear-gradient(135deg, #058dfc, #01c9f5);
   color: white;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
+
+  --hue: 200;
+  --shadow: oklch(25% .2 var(--hue));
+  --shadow-fallback: rgba(0, 0, 0, 0.7);
+  --highlight: oklch(98% .05 var(--hue));
+  --highlight-fallback: rgba(255, 255, 255, 0.95);
+  --heading-color: oklch(98% .04 var(--hue));
+  --heading-color-fallback: white;
 }
 
 /* Heading */
 .heading {
-  font-size: clamp(3rem, 15vw, 8rem);
+  font-size: clamp(3.5rem, 20vw + 2vh, 12rem);
+  letter-spacing: .3ch;
   margin: 0;
-  font-family: monospace;
-  line-height: 1;
+  color: var(--heading-color, var(--heading-color-fallback));
+  text-shadow:
+    0 .1ch 20px var(--shadow, var(--shadow-fallback)),
+    0 -2px 0 var(--highlight, var(--highlight-fallback));
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  z-index: 35;
+  position: relative;
+  text-transform: none;
+  width: 100%;
+  display: flex;
+  justify-content: center;
 }
 
 /* SubHeading */
 .subHeading {
   display: block;
-  margin-top: 0.5rem;
+  margin-top: 10rem;
   /* font-size: clamp(1.5rem, 5vw, 2.5rem); */
   font-size: 3rem;
   font-family: sans-serif;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
 }
 
 .waves {
