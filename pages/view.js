@@ -35,6 +35,7 @@ export default function View() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [hasStartedOnce, setHasStartedOnce] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
   const playerRef = useRef(null);
   const currentIndexRef = useRef(0);
 
@@ -108,6 +109,8 @@ export default function View() {
     });
     onlineUnsubRef.current = onlineUnsub;
 
+    setIsLoaded(true);
+
     return () => {
       if (linksUnsubRef.current) linksUnsubRef.current();
       if (onlineUnsubRef.current) onlineUnsubRef.current();
@@ -126,9 +129,6 @@ export default function View() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Quando a stream começar (ou quando mudar links/audioEnabled), inicializa player
-  // IMPORTANTE: incluí `audioEnabled` nos deps para que, se o usuário interagir antes da stream,
-  // o effect que cria o player veja o valor atual de audioEnabled ao criar o player.
   useEffect(() => {
     if (!isStreaming || links.length === 0) return;
 
@@ -218,7 +218,7 @@ export default function View() {
 
   const handleEnableAudio = () => {
     setAudioEnabled(true);
-    showToast('🔊 Áudio ativado');
+    if (isStreaming) showToast('🔊 Áudio ativado');
 
     // Se o player já existir, desmuta imediatamente
     if (playerRef.current) {
@@ -234,34 +234,33 @@ export default function View() {
     <>
       <div className={styles.container}>
 
+        {/* Overlays */}
         {!audioEnabled && (
           isStreaming ? (
             <div className={styles.unmuteOverlay} onClick={handleEnableAudio}>
               <img src={muteImg} alt="Som desligado" className={styles.muteIcon} />
             </div>
           ) : (
-            <div className={styles.joinOverlay} onClick={handleEnableAudio}>
-
-            </div>
+            <div className={styles.joinOverlay} onClick={handleEnableAudio}></div>
           )
         )}
 
         {/* Player container (YouTube IFrame API will replace this div with an iframe) */}
         {isStreaming && links.length > 0 ? (
           <div className={styles.videoWrapper} style={{ width: '100%', height: '100%' }}>
-            {/* prevent clicks */}
+            {/* prevent clicks and context menu */}
             <div
               className={styles.clickBlocker}
               onClick={() => { }}
               onDoubleClick={() => { }}
-              onContextMenu={(e) => e.preventDefault()} // avoids context menu 
+              onContextMenu={(e) => e.preventDefault()}
               role="presentation"
             />
             <div id="player" className={styles.video} style={{ width: '100%', height: '100%' }}></div>
           </div>
         ) : (
-          // conteúdo quando não há live
-          <>
+          // Not streaming
+          isLoaded && <>
             <div className={styles.poster}>
               <h1 className={styles.heading}>C I M E N A</h1>
               <span className={styles.subHeading}>
@@ -269,9 +268,15 @@ export default function View() {
               </span>
             </div>
 
+            <div className={styles.initPoster}>
+              <span className={`${styles.initHeading} ${audioEnabled && styles.initHeadingFade}`}>
+                {"Toque para entrar"}
+              </span>
+            </div>
+
             <div>
               <svg
-                className={styles.waves}
+                className={`${styles.waves} ${audioEnabled && styles.wavesLow}`}
                 xmlns="http://www.w3.org/2000/svg"
                 xmlnsXlink="http://www.w3.org/1999/xlink"
                 viewBox="0 24 150 28"
@@ -292,13 +297,14 @@ export default function View() {
                   <use xlinkHref="#gentle-wave" x="48" y="0" fill="rgba(255, 255, 255, 0.7)" />
                   <use xlinkHref="#gentle-wave" x="48" y="3" fill="rgba(255, 255, 255, 0.5)" />
                   <use xlinkHref="#gentle-wave" x="48" y="5" fill="rgba(255, 255, 255, 0.3)" />
-                  <use xlinkHref="#gentle-wave" x="48" y="7" fill="#fff" />
+                  <use xlinkHref="#gentle-wave" x="48" y="7" fill="rgba(255, 255, 255, 1)" />
                 </g>
               </svg>
             </div>
 
-            <div className={styles.fill}></div>
+            <div className={`${styles.fill} ${audioEnabled && styles.fillLow}`}></div>
           </>
+
         )}
       </div>
 

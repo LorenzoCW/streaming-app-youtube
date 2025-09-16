@@ -432,7 +432,7 @@ export default function Share() {
     <div className={styles.container}>
       {/* Side Panel */}
       {/* <div className={`${styles.sidePanel} ${isStreaming ? styles.sidePanelActive : ''}`}> */}
-      <div className={`${styles.sidePanel} ${true ? styles.sidePanelActive : ''}`}>
+      <div className={`${styles.sidePanel} ${styles.sidePanelActive}`}>
 
         <h2 style={{ marginTop: 0 }}>Links da Playlist</h2>
 
@@ -468,7 +468,7 @@ export default function Share() {
       </div>
 
       {/* Main Content */}
-      <div className={`${styles.mainContent} ${isWideScreen ? styles.mainContentShifted : ''}`}>
+      <div className={`${styles.mainContent} ${isWideScreen && styles.mainContentShifted}`}>
         {/* Header */}
         <div className={styles.header}>
           <div className={styles.headerContent}>
@@ -481,7 +481,7 @@ export default function Share() {
 
         {/* Preview Container */}
         <div className={styles.previewContainer}>
-          <div className={`${styles.statusBadge} ${isStreaming ? styles.statusBadgeActive : ''}`}>
+          <div className={`${styles.statusBadge} ${isStreaming && styles.statusBadgeActive}`}>
             <span style={{ textAlign: 'left', display: 'flex' }}>
               {isStreaming ? '🟢 Transmissão ativa' : '🔴 Transmissão parada'}
             </span>

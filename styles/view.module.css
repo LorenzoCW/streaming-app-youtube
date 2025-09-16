@@ -22,7 +22,7 @@
 .video {
   width: 100%;
   height: 100%;
-  z-index: 20;
+  z-index: 30;
   object-fit: contain;
   background-color: black;
   position: relative;
@@ -33,7 +33,7 @@
   position: absolute;
   top: 0;
   left: 0;
-  z-index: 40;
+  z-index: 50;
   width: 100%;
   height: 100%;
   background: rgba(0, 0, 0, 0.25);
@@ -53,7 +53,7 @@
   position: absolute;
   top: 0;
   left: 0;
-  z-index: 40;
+  z-index: 50;
   width: 100%;
   height: 100%;
   background: rgba(0, 0, 0, 0);
@@ -68,7 +68,7 @@
   position: absolute;
   /* top:0; right:0; bottom:0; left:0 */
   inset: 0;
-  z-index: 30;
+  z-index: 40;
   background: transparent;
   cursor: default;
   /* garante que o elemento receba eventos de ponteiro */
@@ -89,6 +89,7 @@
   text-align: center;
   background: linear-gradient(135deg, #058dfc, #01c9f5);
   color: white;
+  z-index: 10;
 
   --hue: 200;
   --shadow: oklch(25% .2 var(--hue));
@@ -99,8 +100,23 @@
   --heading-color-fallback: white;
 }
 
+.initPoster {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  z-index: 30;
+}
+
 /* Heading */
 .heading {
+  font-family: monospace;
   font-size: clamp(3.5rem, 20vw + 2vh, 12rem);
   letter-spacing: .3ch;
   margin: 0;
@@ -110,7 +126,6 @@
     0 -2px 0 var(--highlight, var(--highlight-fallback));
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  z-index: 35;
   position: relative;
   text-transform: none;
   width: 100%;
@@ -122,28 +137,58 @@
 .subHeading {
   display: block;
   margin-top: 10rem;
-  /* font-size: clamp(1.5rem, 5vw, 2.5rem); */
   font-size: 3rem;
   font-family: sans-serif;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
 }
 
+/* Initial Heading */
+.initHeading {
+  display: block;
+  margin-top: 10rem;
+  font-size: 3rem;
+  font-family: sans-serif;
+  text-shadow: 0 2px 4px rgba(56, 56, 56, 0.404);
+  color: #363636;
+  transition: all;
+  transition-duration: 1s;
+}
+
+.initHeadingFade {
+  color: #00000000;
+  text-shadow: none;
+}
+
 .waves {
   position: absolute;
-  bottom: 0%;
+  bottom: 80%;
   width: 100%;
   height: 15vh;
   min-height: 100px;
   max-height: 150px;
-  z-index: 10;
+  z-index: 20;
+  transition: all;
+  transition-duration: 5s;
+}
+
+.wavesLow {
+  bottom: 0%;
 }
 
 .fill {
-  background: rgba(21, 71, 139, 1);
+  /* background: rgba(21, 71, 139, 1); */
+  background: rgb(255, 255, 255);
   position: absolute;
-  height: 0%;
+  height: 80%;
   width: 100%;
   bottom: 0%;
+  z-index: 20;
+  transition: all;
+  transition-duration: 5s;
+}
+
+.fillLow {
+  height: 0%;
 }
 
 .parallax>use {
@@ -190,15 +235,14 @@
     font-size: 2rem;
   }
 
-  .waves {
+  .wavesLow {
     bottom: 13%;
     height: 10vh;
     min-height: 50px;
     max-height: 100px;
   }
 
-  .fill {
-    background: rgba(21, 71, 139, 1);
+  .fillLow {
     height: 13%;
   }
 }
