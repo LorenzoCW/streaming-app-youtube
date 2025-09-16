@@ -48,23 +48,7 @@ export default function View() {
     }
   };
 
-  // Monta src do embed com autoplay/mute conforme estado (fallback - not used when using YT API)
-  const buildEmbedSrc = (vid, muted) => {
-    if (!vid) return '';
-    const base = `https://www.youtube.com/embed/${vid}`;
-    const params = new URLSearchParams({
-      autoplay: '1',
-      playsinline: '1',
-      rel: '0',
-      modestbranding: '1',
-      controls: '0',
-      disablekb: '1',
-      mute: muted ? '1' : '0'
-    });
-    return `${base}?${params.toString()}`;
-  };
-
-  // Use YouTube IFrame API to control playlist sequencing
+  // YouTube IFrame API loader
   const ensureYouTubeAPI = () => {
     return new Promise((resolve) => {
       if (window.YT && window.YT.Player) return resolve();
@@ -76,11 +60,7 @@ export default function View() {
       const script = document.createElement('script');
       script.id = 'youtube-iframe-api';
       script.src = 'https://www.youtube.com/iframe_api';
-      script.onload = () => {
-        // The API sets window.YT when ready and calls onYouTubeIframeAPIReady; we resolve on that
-      };
       document.body.appendChild(script);
-      // set global ready callback
       window.onYouTubeIframeAPIReady = () => resolve();
     });
   };
@@ -105,16 +85,12 @@ export default function View() {
       const exists = snap.exists();
 
       if (!exists) {
-        // stopped -> primeiro limpa o player para evitar que a YT API tente manipular o DOM
-        setHasStartedOnce(prev => prev || false);
-
+        // stopped -> limpa player para evitar manipulação do DOM pela YT API
         if (playerRef.current) {
           try {
             if (typeof playerRef.current.destroy === 'function') {
-              // método oficial para limpar player e listeners
               playerRef.current.destroy();
             } else if (typeof playerRef.current.stopVideo === 'function') {
-              // fallback mínimo
               playerRef.current.stopVideo();
             }
           } catch (e) {
@@ -123,7 +99,6 @@ export default function View() {
           playerRef.current = null;
         }
 
-        // agora atualiza o state (isso pode remover o <div id="player">)
         setIsStreaming(false);
       } else {
         // started
@@ -137,7 +112,6 @@ export default function View() {
       if (linksUnsubRef.current) linksUnsubRef.current();
       if (onlineUnsubRef.current) onlineUnsubRef.current();
 
-      // garante destruir o YT player caso o componente seja desmontado
       if (playerRef.current) {
         try {
           if (typeof playerRef.current.destroy === 'function') {
@@ -152,7 +126,9 @@ export default function View() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // When links change and streaming is active, (re)initialize or load first video
+  // Quando a stream começar (ou quando mudar links/audioEnabled), inicializa player
+  // IMPORTANTE: incluí `audioEnabled` nos deps para que, se o usuário interagir antes da stream,
+  // o effect que cria o player veja o valor atual de audioEnabled ao criar o player.
   useEffect(() => {
     if (!isStreaming || links.length === 0) return;
 
@@ -174,9 +150,20 @@ export default function View() {
           },
           events: {
             onReady: (ev) => {
-              // mute by default
-              if (!audioEnabled) ev.target.mute();
-              // load first
+              // Se audioEnabled for false, mantemos muted
+              // Se for true porque o usuário já clicou, não chamamos mute()
+              if (!audioEnabled && typeof ev.target.mute === 'function') {
+                ev.target.mute();
+              } else {
+                // tenta garantir que esteja audível
+                if (typeof ev.target.unMute === 'function') {
+                  try { ev.target.unMute(); } catch (e) { }
+                } else if (typeof ev.target.setVolume === 'function') {
+                  try { ev.target.setVolume(100); } catch (e) { }
+                }
+              }
+
+              // carrega primeiro vídeo
               const first = links[0];
               if (first && first.videoId) {
                 currentIndexRef.current = 0;
@@ -184,17 +171,13 @@ export default function View() {
               }
             },
             onStateChange: (ev) => {
-              // YT.PlayerState.ENDED === 0
               if (ev.data === window.YT.PlayerState.ENDED) {
-                // advance
                 const next = currentIndexRef.current + 1;
                 if (next < links.length) {
                   currentIndexRef.current = next;
                   const nextVid = links[next].videoId;
                   try { playerRef.current.loadVideoById(nextVid); } catch (e) { playerRef.current.cueVideoById(nextVid); }
                 } else {
-                  // playlist finished -> optionally loop or stop
-                  // We'll stop and keep poster state
                   showToast('🔚 Playlist finalizada');
                 }
               }
@@ -212,42 +195,55 @@ export default function View() {
         }
       }
 
-      // ensure mute state
+      // ensure mute/unmute according to audioEnabled (se o player já existia)
       if (playerRef.current) {
         if (audioEnabled) {
           if (typeof playerRef.current.unMute === 'function') {
-            playerRef.current.unMute();
+            try { playerRef.current.unMute(); } catch (e) { }
           } else if (typeof playerRef.current.setVolume === 'function') {
-            // fallback: ajustar volume caso API de mute não esteja disponível
-            playerRef.current.setVolume(100);
+            try { playerRef.current.setVolume(100); } catch (e) { }
           }
         } else {
           if (typeof playerRef.current.mute === 'function') {
-            playerRef.current.mute();
+            try { playerRef.current.mute(); } catch (e) { }
           } else if (typeof playerRef.current.setVolume === 'function') {
-            // fallback: silenciar via volume
-            playerRef.current.setVolume(0);
+            try { playerRef.current.setVolume(0); } catch (e) { }
           }
         }
       }
     })();
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [links, isStreaming]);
+  }, [links, isStreaming, audioEnabled]);
 
   const handleEnableAudio = () => {
     setAudioEnabled(true);
     showToast('🔊 Áudio ativado');
-    if (playerRef.current && playerRef.current.unMute) playerRef.current.unMute();
+
+    // Se o player já existir, desmuta imediatamente
+    if (playerRef.current) {
+      if (typeof playerRef.current.unMute === 'function') {
+        try { playerRef.current.unMute(); } catch (e) { console.warn('unMute erro', e); }
+      } else if (typeof playerRef.current.setVolume === 'function') {
+        try { playerRef.current.setVolume(100); } catch (e) { }
+      }
+    }
   };
 
   return (
     <>
       <div className={styles.container}>
-        {isStreaming && hasStartedOnce && !audioEnabled && (
-          <div className={styles.overlay} onClick={handleEnableAudio}>
-            <img src={muteImg} alt="Som desligado" className={styles.muteIcon} />
-          </div>
+
+        {!audioEnabled && (
+          isStreaming ? (
+            <div className={styles.unmuteOverlay} onClick={handleEnableAudio}>
+              <img src={muteImg} alt="Som desligado" className={styles.muteIcon} />
+            </div>
+          ) : (
+            <div className={styles.joinOverlay} onClick={handleEnableAudio}>
+
+            </div>
+          )
         )}
 
         {/* Player container (YouTube IFrame API will replace this div with an iframe) */}
@@ -289,10 +285,14 @@ export default function View() {
                   />
                 </defs>
                 <g className={styles.parallax}>
-                  <use xlinkHref="#gentle-wave" x="48" y="0" fill="rgba(90, 197, 241, 1)" />
+                  {/* <use xlinkHref="#gentle-wave" x="48" y="0" fill="rgba(90, 197, 241, 1)" />
                   <use xlinkHref="#gentle-wave" x="48" y="3" fill="rgba(37, 151, 213, 1)" />
                   <use xlinkHref="#gentle-wave" x="48" y="5" fill="rgba(17, 107, 180, 1)" />
-                  <use xlinkHref="#gentle-wave" x="48" y="7" fill="rgba(21, 71, 139, 1)" />
+                  <use xlinkHref="#gentle-wave" x="48" y="7" fill="rgba(21, 71, 139, 1)" /> */}
+                  <use xlinkHref="#gentle-wave" x="48" y="0" fill="rgba(255, 255, 255, 0.7)" />
+                  <use xlinkHref="#gentle-wave" x="48" y="3" fill="rgba(255, 255, 255, 0.5)" />
+                  <use xlinkHref="#gentle-wave" x="48" y="5" fill="rgba(255, 255, 255, 0.3)" />
+                  <use xlinkHref="#gentle-wave" x="48" y="7" fill="#fff" />
                 </g>
               </svg>
             </div>
